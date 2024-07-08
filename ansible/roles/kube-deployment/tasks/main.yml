@@ -1,0 +1,19 @@
+---
+- ansible.builtin.set_fact:
+    deploy_dirs:
+      - admin
+      - frontend
+  tags: deploy_apps
+
+- name: Ensure kube deployment folder exists
+  ansible.builtin.file:
+    path: "{{ kube_deployments_dir }}"
+    state: directory
+
+- name: Deploy each app
+  ansible.builtin.include_tasks: deploy_app.yml
+  tags: deploy_apps
+  loop: "{{ deploy_dirs }}"
+  loop_control:
+    loop_var: "outer_item"
+

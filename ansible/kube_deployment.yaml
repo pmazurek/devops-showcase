@@ -1,0 +1,6 @@
+---
+- hosts: kube-control[0]
+  become: yes
+  roles:
+    - kube-deployment
+    

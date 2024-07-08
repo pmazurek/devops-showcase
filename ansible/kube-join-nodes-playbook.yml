@@ -1,0 +1,29 @@
+---
+- hosts: kube-control
+  become: no
+  tasks:
+    - name: register the join command
+      shell: kubeadm token create --print-join-command
+      register: join_command
+      delegate_to: "{{ groups['kube-control'][0] }}"
+      run_once: true
+
+    - local_action:
+        module: copy
+        content: "{{ join_command.stdout }}"
+        dest: ./kube_node_join_command
+      become: no
+      run_once: true
+
+
+- hosts: kube-workers
+  become: yes
+  serial: 1
+  vars:
+    join_command: "{{ lookup('file', './kube_node_join_command') }}"
+  tasks:
+    - shell: "{{ join_command }}"
+      
+
+#kubelet-insecure-tls
+

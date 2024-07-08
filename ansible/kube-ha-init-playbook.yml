@@ -1,0 +1,127 @@
+  ##
+  ### First initialize the main node and build and register the join command
+  ##
+- hosts: kube-control
+  become: yes
+  tasks:
+    - name: Mark a node to be main
+      shell: "touch /tmp/main"
+      delegate_to: "{{ groups['kube-control'][0] }}"
+      run_once: true
+      tags: join
+
+    - name: Init the cluster
+      shell: "kubeadm init --control-plane-endpoint {{ kube_loadbalancer_domain }}:6443 --pod-network-cidr 192.168.0.0/16 --kubernetes-version {{ kube_cluster_version }}"
+      delegate_to: "{{ groups['kube-control'][0] }}"
+      register: kube_init_output
+      run_once: true
+
+    - debug:
+        msg: "{{ kube_init_output }}"
+      delegate_to: "{{ groups['kube-control'][0] }}"
+      run_once: true
+
+    - name: kube home dir
+      file:
+        path: "{{ kube_home_dir }}/.kube"
+        state: directory
+      delegate_to: "{{ groups['kube-control'][0] }}"
+      run_once: true
+
+    - name: cp config file
+      shell: "cp /etc/kubernetes/admin.conf {{ kube_home_dir }}/.kube/config"
+      delegate_to: "{{ groups['kube-control'][0] }}"
+      run_once: true
+
+    - name: ensure permissions
+      shell: "chmod 644 {{ kube_home_dir }}/.kube/config"
+      delegate_to: "{{ groups['kube-control'][0] }}"
+      run_once: true
+
+    - name: install calico plugin
+      shell: "kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.25.0/manifests/calico.yaml"
+      become: no
+      tags: calico
+      delegate_to: "{{ groups['kube-control'][0] }}"
+      run_once: true
+
+    - name: Get a certificate key
+      shell: "kubeadm certs certificate-key"
+      register: cert_key
+      delegate_to: "{{ groups['kube-control'][0] }}"
+      run_once: true
+      tags: join
+
+    - name: Upload the certs
+      shell: "kubeadm init phase upload-certs --upload-certs --certificate-key={{ cert_key.stdout }}"
+      delegate_to: "{{ groups['kube-control'][0] }}"
+      run_once: true
+      tags: join
+
+    - name: Get the join command
+      shell: "kubeadm token create --print-join-command"
+      register: join_command
+      delegate_to: "{{ groups['kube-control'][0] }}"
+      run_once: true
+      tags: join
+
+    - set_fact:
+        kube_join_command: "{{ join_command.stdout }} --control-plane --certificate-key {{ cert_key.stdout }}"
+      delegate_to: "{{ groups['kube-control'][0] }}"
+      run_once: true
+      tags: join
+
+    - local_action:
+        module: copy
+        content: "{{ kube_join_command }}"
+        dest: ./kube_join_command
+      become: no
+      tags: join
+
+##
+### Initialize the remaining nodes one by one
+##
+- hosts: kube-control
+  serial: 1
+  become: yes
+  tags: join
+  vars:
+    kube_join_command: "{{ lookup('file', './kube_join_command') }}"
+  tasks:
+    - name: Determine if a node is main or secondary
+      stat:
+        path: /tmp/main
+      register: is_main
+
+    - debug:
+        msg: "{{ kube_join_command }}"
+      run_once: true
+      when: not is_main.stat.exists
+
+    - name: Run the join command 
+      shell: "{{ kube_join_command }}"
+      when: not is_main.stat.exists
+
+    - name: kube home dir
+      file:
+        path: "{{ kube_home_dir }}/.kube"
+        state: directory
+      when: not is_main.stat.exists
+
+    - name: cp config file
+      shell: "cp /etc/kubernetes/admin.conf {{ kube_home_dir }}/.kube/config"
+      when: not is_main.stat.exists
+
+    - name: ensure permissions
+      shell: "chmod 644 {{ kube_home_dir }}/.kube/config"
+      when: not is_main.stat.exists
+
+    - name: Ensure the node is Ready
+      shell: "kubectl get nodes | grep NotReady | cat" # cat at the end to avoid non-zero code for no match
+      register: cmd_res
+      retries: 10
+      delay: 15
+      until: cmd_res.stdout_lines | list | count == 0
+      become: no
+      when: not is_main.stat.exists
+

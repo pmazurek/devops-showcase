@@ -1,0 +1,115 @@
+---
+- hosts: cassandra-instances
+  become: yes
+  tasks:
+    - name: install java
+      ansible.builtin.apt:
+        name: openjdk-8-jre-headless
+        update_cache: true
+        state: present
+
+    - name: Add apache cassandra gpg key
+      apt_key:
+        url: https://www.apache.org/dist/cassandra/KEYS 
+        state: present
+
+    - name: Add cassandra repo
+      lineinfile:
+        dest: /etc/apt/sources.list.d/cassandra.list
+        state: present
+        create: yes
+        line: "deb http://www.apache.org/dist/cassandra/debian 40x main"
+
+    - name: install cassandra
+      ansible.builtin.apt:
+        name: cassandra
+        update_cache: true
+        state: present
+
+    - name: Mark a node to be main
+      shell: "touch /tmp/main"
+      delegate_to: "{{ groups['cassandra-instances'][0] }}"
+      run_once: true
+      when: init_cluster is defined and init_cluster == "yes"
+
+    - name: Stop cassandra
+      ansible.builtin.systemd:
+        name: cassandra
+        state: stopped
+      when: init_cluster is defined and init_cluster == "yes"
+
+    - name: Wipe all cassandra data
+      shell: "rm -rf /var/lib/cassandra/*"
+      when: init_cluster is defined and init_cluster == "yes"
+
+    - name: Provision config file
+      ansible.builtin.template:
+        src: cassandra.yaml.j2
+        dest: /etc/cassandra/cassandra.yaml
+        backup: yes
+      when: init_cluster is defined and init_cluster == "yes"
+      tags: config
+      
+# Start the first node to bootstrap the cluster
+- hosts: cassandra-instances
+  become: yes
+  tags: initialize
+  tasks:
+    - name: Determine if a node is main or secondary
+      stat:
+        path: /tmp/main
+      register: is_main
+
+    - name: Provision config file
+      ansible.builtin.template:
+        src: cassandra.yaml.j2
+        dest: /etc/cassandra/cassandra.yaml
+        backup: yes
+      when: is_main.stat.exists
+
+    - name: Start cassandra
+      ansible.builtin.systemd:
+        name: cassandra
+        state: restarted
+      when: is_main.stat.exists
+
+    - name: Wait until the node is UN
+      shell: "nodetool status | grep 'UN *{{ ansible_all_ipv4_addresses[0] }}' || true"
+      register: nt_result
+      retries: 30
+      delay: 15 
+      until: nt_result.stdout_lines | list | count == 1
+      when: is_main.stat.exists
+
+# Join the remaining nodes into the cluster with serial 1
+- hosts: cassandra-instances
+  become: yes
+  serial: 1
+  tags: join
+  tasks:
+    - name: Determine if a node is main or secondary
+      stat:
+        path: /tmp/main
+      register: is_main
+
+    - name: Provision config file
+      ansible.builtin.template:
+        src: cassandra.yaml.j2
+        dest: /etc/cassandra/cassandra.yaml
+        backup: yes
+      when: not is_main.stat.exists
+
+    - name: Start cassandra
+      ansible.builtin.systemd:
+        name: cassandra
+        state: restarted
+      when: not is_main.stat.exists
+
+    - name: Wait until the node is UN
+      shell: "nodetool status | grep 'UN *{{ ansible_all_ipv4_addresses[0] }}' || true"
+      register: nt_result
+      retries: 30
+      delay: 10   
+      until: nt_result.stdout_lines | list | count == 1
+      when: not is_main.stat.exists
+

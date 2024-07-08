@@ -1,0 +1,22 @@
+- hosts: kube-control
+  become: yes
+  tasks:
+    - name: Init pod network
+      shell: "kubeadm init --pod-network-cidr 192.168.0.0/16 --kubernetes-version {{ kube_cluster_version }}"
+
+    - name: kube home dir
+      file:
+        path: "{{ kube_home_dir }}/.kube"
+        state: directory
+
+    - name: cp config file
+      shell: "cp /etc/kubernetes/admin.conf {{ kube_home_dir }}/.kube/config"
+
+    - name: ensure permissions
+      shell: "chmod 644 {{ kube_home_dir }}/.kube/config"
+
+    - name: install calico plugin
+      shell: "kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml"
+      become: no
+      tags: calico
+

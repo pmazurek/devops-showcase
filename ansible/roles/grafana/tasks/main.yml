@@ -1,0 +1,56 @@
+---
+- name: Install prerequisites
+  ansible.builtin.apt:
+    package:
+      - apt-transport-https
+      - software-properties-common
+      - wget
+    state: present
+    update_cache: true
+  
+- name: Add gpg keys
+  ansible.builtin.apt_key:
+    url: https://apt.grafana.com/gpg.key
+    state: present
+
+- name: Add grafana repo
+  lineinfile:
+    dest: /etc/apt/sources.list.d/grafana.list
+    state: present
+    create: yes
+    line: "deb https://apt.grafana.com stable main"
+
+- name: Install grafana
+  ansible.builtin.apt:
+    package: grafana
+    state: present
+    update_cache: true
+
+- ansible.builtin.template:
+    src: prom-datasource.yaml
+    dest: /etc/grafana/provisioning/datasources/prometheus.yaml
+  tags: config
+
+- ansible.builtin.template:
+    src: dashboards.yaml
+    dest: /etc/grafana/provisioning/dashboards/default-dashboards.yaml
+  tags: config
+
+- name: Ensure dashboard dir exists
+  ansible.builtin.file:
+    path: /var/lib/grafana/dashboards
+    state: directory
+  tags: config
+
+- ansible.builtin.copy:
+    src: templates/default-dashboard.json
+    dest: /var/lib/grafana/dashboards
+  tags: config
+
+- name: Enable and restart grafana
+  ansible.builtin.service:
+    name: grafana-server
+    state: restarted
+    enabled: true
+  tags: config
+    

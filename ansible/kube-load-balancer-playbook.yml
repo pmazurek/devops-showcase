@@ -1,0 +1,43 @@
+---
+- hosts: kube-control-loadbalancers
+  become: yes
+  tasks:
+    - name: Install nginx
+      package:
+        name: nginx
+        state: present
+        update_cache: yes
+    - name: Create the config dir
+      file:
+        path: /etc/nginx/tcpconf.d
+        state: directory
+    - name: Ensure config file is included
+      lineinfile:
+        path: /etc/nginx/nginx.conf
+        line: "include /etc/nginx/tcpconf.d/*;"
+    - name: Provision the config file with correct ip's
+      copy:
+        content: |
+          stream {
+              upstream kubernetes {
+                {% for ip_address in groups['kube-control'] %}
+                  server {{ hostvars[ip_address]['hostname'] }}:6443;
+                {% endfor %}
+              }
+
+              server {
+                  listen 6443;
+                  listen 443;
+                  proxy_pass kubernetes;
+              }
+          }
+        dest: /etc/nginx/tcpconf.d/kube-loadbalancer.conf
+      tags: config
+    - name: Enable nginx
+      service:
+        name: nginx
+        state: restarted
+        enabled: yes
+      tags: config
+
+

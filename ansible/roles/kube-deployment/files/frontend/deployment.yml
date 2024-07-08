@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-deployment
+  namespace: example-app
+spec:
+  selector:
+    matchLabels:
+      app: frontend
+  replicas: 2 # tells deployment to run 2 pods matching the template
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: "{{ ecr_frontend_repo }}:latest"
+        ports:
+        - containerPort: 80
+      imagePullSecrets:
+        - name: ecr-credentials
+

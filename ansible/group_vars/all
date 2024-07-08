@@ -1,0 +1,6 @@
+kube_loadbalancer_domain: "kube-loadbalancer.internal.zone"
+kube_cluster_version: "1.24.0"
+kube_cluster_packages_version: "1.24.0-00"   # to find out: apt-cache show kubelet
+kube_home_dir: "/home/ubuntu"
+kube_deployments_dir: "{{ kube_home_dir }}/deployments"
+cassandra_cluster_name: "cass_cluster"

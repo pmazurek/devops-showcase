@@ -1,0 +1,26 @@
+
+- hosts: all
+  become: yes
+  tasks:
+    - name: Set hostname
+      ansible.builtin.hostname:
+        name: "{{ hostname }}"
+      tags: hostname
+
+    - name: Add all private hostnames
+      ansible.builtin.lineinfile:
+        dest: /etc/hosts
+        line: "{{ hostvars[item]['ansible_all_ipv4_addresses'][0] }} {{ hostvars[item]['hostname'] }}"
+      with_items: "{{ groups['all'] }}"
+      tags: hostname
+
+    - name: install packages
+      ansible.builtin.apt:
+        name: "{{ item }}"
+        state: present
+        update_cache: true
+      with_items:
+        - gpg
+      tags: packages
+
+

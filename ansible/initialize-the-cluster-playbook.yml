@@ -1,0 +1,5 @@
+---
+- import_playbook: kube-common-playbook.yml
+- import_playbook: kube-load-balancer-playbook.yml
+- import_playbook: kube-ha-init-playbook.yml
+- import_playbook: kube-join-nodes-playbook.yml

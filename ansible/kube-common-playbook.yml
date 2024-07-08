@@ -1,0 +1,7 @@
+---
+
+- hosts: kube-control,kube-workers
+  become: yes
+  roles:
+    - kube-common
+

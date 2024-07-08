@@ -1,0 +1,22 @@
+
+- name: Ensure all subdirs exist
+  ansible.builtin.file:
+    path: "{{ kube_deployments_dir }}/{{ outer_item }}"
+    state: directory
+  tags: deploy_apps
+
+- name: Copy all the required files
+  ansible.builtin.template:
+    src: "{{ item }}"
+    dest: "{{ kube_deployments_dir }}/{{ outer_item }}/{{ item | basename }}"
+  tags: deploy_apps
+  with_fileglob:
+    - "{{ outer_item }}/*"
+
+- name: Apply via kubectl
+  shell: "kubectl apply -f {{ kube_deployments_dir }}/{{ outer_item }}/{{ item | basename }}"
+  tags: deploy_apps
+  become: no
+  with_fileglob:
+    - "{{ outer_item }}/*"
+  

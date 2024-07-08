@@ -1,0 +1,8 @@
+---
+
+- name: Install grafana
+  hosts: prometheus-instances
+  become: yes
+  roles:
+    - grafana
+

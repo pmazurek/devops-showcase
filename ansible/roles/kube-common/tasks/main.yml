@@ -1,0 +1,73 @@
+- name: Add kernel modules
+  copy:
+    dest: /etc/modules-load.d/containerd.conf
+    src: modules-containerd.conf
+
+- name: Run modprobe
+  shell: "modprobe {{ item }}"
+  with_items:
+    - overlay
+    - br_netfilter
+
+- name: Copy ip settings
+  copy:
+    src: 99-kubernetes-cri.conf
+    dest: /etc/sysctl.d/99-kubernetes-cri.conf
+
+- name: Run sysctl
+  shell: "sysctl --system"
+
+# install and configure containerd
+- name: Install containerd
+  apt:
+    package: containerd
+    state: present
+    update_cache: true
+
+- name: Make containerd dir
+  file:
+    path: /etc/containerd
+    state: directory 
+
+- name: Push default config
+  shell: "containerd config default > /etc/containerd/config.toml"
+    
+- name: Restart containerd
+  systemd:
+    name: containerd
+    state: restarted
+
+- name: Disable swap
+  shell: "swapoff -a"
+
+- name: Install kube prerequisites packages
+  apt:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - apt-transport-https 
+    - curl
+
+- name: Add kube gpg key
+  apt_key:
+    url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+    state: present
+
+- name: Add kube repo
+  lineinfile:
+    dest: /etc/apt/sources.list.d/kubernetes.list
+    state: present
+    create: yes
+    line: "deb https://apt.kubernetes.io/ kubernetes-xenial main"
+
+- name: Install kube prerequisites packages
+  apt:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+    allow_downgrade: yes
+  with_items:
+    - "kubelet={{ kube_cluster_packages_version }}"
+    - "kubeadm={{ kube_cluster_packages_version }}"
+    - "kubectl={{ kube_cluster_packages_version }}"
+

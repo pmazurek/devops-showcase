@@ -1,0 +1,63 @@
+---
+- hosts: prometheus-instances
+  become: yes
+  tasks:
+    - name: Install nginx
+      package:
+        name: nginx
+        state: present
+        update_cache: yes
+    - name: Provision basic_auth
+      ansible.builtin.copy:
+        dest: /etc/nginx/basic_auth
+        content: "foobar:$2y$10$WkJF7GRQFuJY36//CxxtL.cYg80LHDtCmelI8fBfnHkMQ82qXd1c6"
+      tags: nginx_config
+    - name: Provision the config file 
+      copy:
+        content: |
+          upstream prometheus {
+              server localhost:9999;
+          }
+          server {
+              listen 9090;
+              location / {
+                proxy_pass http://prometheus;
+              }
+              auth_basic "Administrator’s Area";
+              auth_basic_user_file /etc/nginx/basic_auth;
+          }
+        dest: /etc/nginx/conf.d/prometheus.conf
+      tags: nginx_config
+    - name: Enable nginx
+      service:
+        name: nginx
+        state: restarted
+        enabled: yes
+      tags: nginx_config
+  roles:
+  - cloudalchemy.prometheus
+  vars:
+    prometheus_web_listen_address: "127.0.0.1:9999"
+    prometheus_targets:
+      all_hosts:
+      - targets: "{%- set endpoints = [] -%}
+          {%- for host_ip in groups['all'] -%}
+            {%- if host_ip not in groups['prometheus-instances'] -%}
+              {{ endpoints.append(hostvars[host_ip]['hostname'] + ':9100') }}
+            {%- endif -%}
+          {%- endfor -%}{{ endpoints }}"
+        labels:
+          env: prometheus
+    prometheus_scrape_configs:
+      - job_name: "prometheus"    # Custom scrape job, here using `static_config`
+        metrics_path: "/metrics"
+        static_configs:
+          - targets:
+              - "localhost:9090"
+        basic_auth: 
+          username: "foobar"
+          password: "foobar"
+      - job_name: "all_hosts"
+        file_sd_configs:
+          - files:
+              - "{{ prometheus_config_dir }}/file_sd/all_hosts.yml" # This line loads file created from `prometheus_targets`
