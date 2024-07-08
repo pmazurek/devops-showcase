@@ -37,6 +37,7 @@ This includes (so far):
 To play around with it I recommend setting up dynamic forwarding:
 
 `ssh ubuntu@kube-control-1 -D 1234 -N &`
+(note the domain only works if you copy-pasted into /etc/hosts during setting up the Infrastructure step, if you didnt, use IP)
 
 And then set up a localhost:1234 proxy on any browser.
 
